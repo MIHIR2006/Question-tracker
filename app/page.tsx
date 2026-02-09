@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Image from "next/image"
 import {
   Accordion,
@@ -18,19 +18,36 @@ import {
   ExternalLink,
   Star,
   FileText,
-  ChevronDown
+  ChevronDown,
+  Youtube
 } from "lucide-react"
+import sheetData from "@/sheet.json"
 
-type Tag = string;
+type SheetQuestion = {
+  _id: string;
+  questionId: {
+    name: string;
+    difficulty: string;
+    platform: string;
+    problemUrl: string;
+    topics: string[];
+  };
+  topic: string;
+  title: string;
+  subTopic: string;
+  resource: string;
+  isSolved: boolean;
+};
 
 type Question = {
   id: string;
   title: string;
   status: "completed" | "pending";
-  difficulty: "Easy" | "Medium" | "Hard";
-  tags: Tag[];
+  difficulty: "Easy" | "Medium" | "Hard" | "Basic";
+  platform: string;
   link: string;
-  notes?: boolean;
+  resource?: string;
+  topics: string[];
   starred?: boolean;
 };
 
@@ -44,161 +61,79 @@ type Topic = {
   id: string;
   title: string;
   subtopics: SubTopic[];
-  manualProgress?: string;
 };
 
+// Transform sheet.json data into our UI structure
+function transformSheetData(data: any): Topic[] {
+  const questions: SheetQuestion[] = data.data.questions;
+  const topicsMap = new Map<string, Map<string, Question[]>>();
 
-const initialData: Topic[] = [
-  {
-    id: "arrays-sorting",
-    title: "Arrays & Sorting",
-    subtopics: [
-      {
-        id: "easy",
-        title: "Easy",
-        questions: [
-          {
-            id: "majority-element",
-            title: "Majority Element",
-            status: "completed",
-            difficulty: "Easy",
-            tags: ["Arrays", "HashMap and Set"],
-            link: "https://leetcode.com/problems/majority-element/description/",
-            starred: true,
-            notes: true
-          },
-          {
-            id: "remove-duplicates",
-            title: "Remove Duplicates from Sorted Array",
-            status: "pending",
-            difficulty: "Easy",
-            tags: ["Arrays", "Two Pointers"],
-            link: "#",
-            starred: false,
-            notes: false
-          }
-        ]
-      },
-      {
-        id: "medium",
-        title: "Medium",
-        questions: [
-          {
-            id: "search-rotated",
-            title: "Search in Rotated Sorted Array",
-            status: "pending",
-            difficulty: "Medium",
-            tags: ["Arrays", "Binary Search"],
-            link: "#",
-            starred: true,
-            notes: true
-          },
-          {
-            id: "3sum",
-            title: "3Sum",
-            status: "pending",
-            difficulty: "Medium",
-            tags: ["Arrays", "Two Pointers"],
-            link: "#",
-            starred: false,
-            notes: false
-          }
-        ]
-      },
-      {
-        id: "hard",
-        title: "Hard",
-        questions: [
-          {
-            id: "trapping-rain",
-            title: "Trapping Rain Water",
-            status: "pending",
-            difficulty: "Hard",
-            tags: ["Arrays", "Two Pointers"],
-            link: "#",
-            starred: true,
-            notes: true
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: "strings-searching",
-    title: "Strings & Searching",
-    subtopics: [
-      {
-        id: "strings-easy",
-        title: "Easy",
-        questions: [
-          {
-            id: "valid-anagram",
-            title: "Valid Anagram",
-            status: "completed",
-            difficulty: "Easy",
-            tags: ["Strings", "HashTable"],
-            link: "#",
-            starred: false,
-            notes: true
-          },
-          {
-            id: "valid-palindrome",
-            title: "Valid Palindrome",
-            status: "completed",
-            difficulty: "Easy",
-            tags: ["Strings", "Two Pointers"],
-            link: "#",
-            starred: true,
-            notes: false
-          }
-        ]
-      },
-      {
-        id: "strings-medium",
-        title: "Medium",
-        questions: [
-          {
-            id: "longest-substring",
-            title: "Longest Substring Without Repeating",
-            status: "pending",
-            difficulty: "Medium",
-            tags: ["Strings", "Sliding Window"],
-            link: "#",
-            starred: true,
-            notes: true
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: "linked-lists",
-    title: "Linked Lists",
-    manualProgress: "0 / 11",
-    subtopics: []
-  },
-  {
-    id: "trees",
-    title: "Trees",
-    manualProgress: "0 / 12",
-    subtopics: []
-  },
-  {
-    id: "dp",
-    title: "Dynamic Programming",
-    manualProgress: "1 / 12",
-    subtopics: []
-  },
-  {
-    id: "misc",
-    title: "Miscellaneous",
-    manualProgress: "1 / 8",
-    subtopics: []
+  questions.forEach((q) => {
+    const topicName = q.topic;
+    const subTopicName = q.subTopic;
+
+    if (!topicsMap.has(topicName)) {
+      topicsMap.set(topicName, new Map());
+    }
+
+    const subTopicsMap = topicsMap.get(topicName)!;
+    if (!subTopicsMap.has(subTopicName)) {
+      subTopicsMap.set(subTopicName, []);
+    }
+
+    const question: Question = {
+      id: q._id,
+      title: q.questionId.name,
+      status: q.isSolved ? "completed" : "pending",
+      difficulty: q.questionId.difficulty as any,
+      platform: q.questionId.platform,
+      link: q.questionId.problemUrl,
+      resource: q.resource,
+      topics: q.questionId.topics,
+      starred: false,
+    };
+
+    subTopicsMap.get(subTopicName)!.push(question);
+  });
+
+  const topics: Topic[] = [];
+  topicsMap.forEach((subTopicsMap, topicName) => {
+    const subtopics: SubTopic[] = [];
+    subTopicsMap.forEach((questions, subTopicName) => {
+      subtopics.push({
+        id: subTopicName.toLowerCase().replace(/\s+/g, '-'),
+        title: subTopicName,
+        questions
+      });
+    });
+
+    topics.push({
+      id: topicName.toLowerCase().replace(/\s+/g, '-'),
+      title: topicName,
+      subtopics
+    });
+  });
+
+  return topics;
+}
+
+// Get platform logo
+function getPlatformLogo(platform: string) {
+  switch (platform.toLowerCase()) {
+    case 'leetcode':
+      return '/assets/leetcode_dark.png';
+    case 'geeksforgeeks':
+      return '/assets/leetcode_dark.png'; // Update with GFG logo if available
+    case 'codestudio':
+      return '/assets/leetcode_dark.png'; // Update with CodeStudio logo if available
+    default:
+      return '/assets/leetcode_dark.png';
   }
-];
+}
 
 export default function Home() {
-  const [topics, setTopics] = useState<Topic[]>(initialData);
+  const initialTopics = useMemo(() => transformSheetData(sheetData), []);
+  const [topics, setTopics] = useState<Topic[]>(initialTopics);
 
   const toggleQuestionStatus = (topicId: string, subTopicId: string, questionId: string) => {
     setTopics(prev => prev.map(topic => {
@@ -238,10 +173,6 @@ export default function Home() {
   };
 
   const calculateTopicProgress = (topic: Topic) => {
-    if (topic.manualProgress && topic.subtopics.length === 0) {
-      return { text: topic.manualProgress, percent: 0 };
-    }
-
     let completed = 0;
     let total = 0;
 
@@ -269,15 +200,19 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans transition-colors duration-300">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header Action */}
-        <div className="flex justify-end">
+        {/* Header with Sheet Info */}
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">{sheetData.data.sheet.name}</h1>
+            <p className="text-muted-foreground text-sm max-w-3xl">{sheetData.data.sheet.description}</p>
+          </div>
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium px-4">
             <Plus className="mr-2 h-4 w-4" /> Add <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
         </div>
 
         {/* Main Accordion */}
-        <Accordion type="multiple" defaultValue={["arrays-sorting"]} className="w-full space-y-4">
+        <Accordion type="multiple" defaultValue={topics.length > 0 ? [topics[0].id] : []} className="w-full space-y-4">
           {topics.map((topic) => {
             const progress = calculateTopicProgress(topic);
 
@@ -320,7 +255,7 @@ export default function Home() {
 
                 <AccordionContent className="p-4 bg-background">
                   {topic.subtopics.length > 0 ? (
-                    <Accordion type="multiple" defaultValue={["easy", "medium", "hard", "strings-easy", "strings-medium"]} className="w-full space-y-3">
+                    <Accordion type="multiple" defaultValue={topic.subtopics.map(st => st.id)} className="w-full space-y-3">
                       {topic.subtopics.map((subtopic) => {
                         const subProgress = calculateSubtopicProgress(subtopic);
                         return (
@@ -345,9 +280,9 @@ export default function Home() {
                               <div className="space-y-2">
                                 {subtopic.questions.map((q) => (
                                   <div key={q.id} className="flex items-center justify-between px-4 py-3 bg-card border border-border rounded-md hover:border-muted-foreground/30 transition-colors group flex-nowrap">
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-4 flex-1 min-w-0">
                                       <div
-                                        className="cursor-pointer hover:scale-110 transition-transform"
+                                        className="cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
                                         onClick={() => toggleQuestionStatus(topic.id, subtopic.id, q.id)}
                                       >
                                         {q.status === "completed" ? (
@@ -356,36 +291,51 @@ export default function Home() {
                                           <Circle className="h-5 w-5 text-emerald-500" />
                                         )}
                                       </div>
-                                      <span className="text-foreground text-sm font-medium select-none">{q.title}</span>
-                                      <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" />
+                                      <span className="text-foreground text-sm font-medium select-none truncate">{q.title}</span>
                                     </div>
 
-                                    <div className="flex items-center">
-                                      {/* Logo column - fixed width */}
-                                      <div className="w-8 flex items-center justify-center">
-                                        {q.link && (
-                                          <a
-                                            href={q.link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <Image
-                                              src="/assets/leetcode_dark.png"
-                                              alt="LeetCode"
-                                              width={20}
-                                              height={20}
-                                              className="w-5 h-5 object-contain"
-                                            />
-                                          </a>
-                                        )}
-                                      </div>
+                                    <div className="flex items-center gap-4 flex-shrink-0">
+                                      {/* YouTube Resource Link */}
+                                      {q.resource && (
+                                        <a
+                                          href={q.resource}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
+                                          onClick={(e) => e.stopPropagation()}
+                                          title="Watch tutorial"
+                                        >
+                                          <Image
+                                            src="/assets/Youtube.png"
+                                            alt="YouTube"
+                                            width={20}
+                                            height={20}
+                                            className="w-5 h-5 object-contain"
+                                          />
+                                        </a>
+                                      )}
 
-                                      {/* Difficulty column - fixed width */}
+                                      {/* Platform Logo */}
+                                      <a
+                                        href={q.link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
+                                        onClick={(e) => e.stopPropagation()}
+                                        title={`Open on ${q.platform}`}
+                                      >
+                                        <Image
+                                          src={getPlatformLogo(q.platform)}
+                                          alt={q.platform}
+                                          width={20}
+                                          height={20}
+                                          className="w-5 h-5 object-contain"
+                                        />
+                                      </a>
+
+                                      {/* Difficulty */}
                                       <div className="w-16 flex items-center justify-center">
-                                        <span className={`text-xs font-semibold
-                                        ${q.difficulty === "Easy" ? "text-emerald-500" :
+                                        <span className={`text-xs font-semibold ${q.difficulty === "Easy" || q.difficulty === "Basic" ? "text-emerald-500" :
                                             q.difficulty === "Medium" ? "text-yellow-500" :
                                               "text-red-500"
                                           }`}>
@@ -393,32 +343,33 @@ export default function Home() {
                                         </span>
                                       </div>
 
-                                      {/* Tags column - fixed width */}
+                                      {/* Topics/Tags */}
                                       <div className="w-48 flex items-center justify-end gap-2">
-                                        {q.tags.map(tag => (
+                                        {q.topics.slice(0, 2).map((topic, idx) => (
                                           <span
-                                            key={tag}
-                                            className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded max-w-[80px] truncate"
-                                            title={tag}
+                                            key={idx}
+                                            className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded max-w-[100px] truncate"
+                                            title={topic}
                                           >
-                                            {tag}
+                                            {topic}
                                           </span>
                                         ))}
-                                        {q.difficulty === "Easy" && (
-                                          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">+1</span>
-                                        )}
-                                        {q.difficulty === "Hard" && (
-                                          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">+2</span>
+                                        {q.topics.length > 2 && (
+                                          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                                            +{q.topics.length - 2}
+                                          </span>
                                         )}
                                       </div>
 
-                                      {/* Icons column - fixed width */}
-                                      <div className="w-20 flex items-center justify-end gap-3 pl-4 border-l border-border ml-4">
+                                      {/* Action Icons */}
+                                      <div className="w-16 flex items-center justify-end gap-3 pl-4 border-l border-border">
                                         <Star
                                           className={`h-4 w-4 cursor-pointer hover:scale-110 transition-transform ${q.starred ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`}
-                                          onClick={() => toggleStar(topic.id, subtopic.id, q.id)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleStar(topic.id, subtopic.id, q.id);
+                                          }}
                                         />
-                                        <FileText className={`h-4 w-4 cursor-pointer hover:text-foreground transition-colors ${q.notes ? "text-primary" : "text-muted-foreground"}`} />
                                       </div>
                                     </div>
                                   </div>
@@ -430,7 +381,7 @@ export default function Home() {
                       })}
                     </Accordion>
                   ) : (
-                    null
+                    <div className="text-center text-muted-foreground py-8">No questions available</div>
                   )}
                 </AccordionContent>
               </AccordionItem>
