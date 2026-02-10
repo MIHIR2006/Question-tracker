@@ -21,6 +21,23 @@ import {
   ChevronDown,
   Youtube
 } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import sheetData from "@/sheet.json"
 
 type SheetQuestion = {
@@ -63,7 +80,6 @@ type Topic = {
   subtopics: SubTopic[];
 };
 
-// Transform sheet.json data into our UI structure
 function transformSheetData(data: any): Topic[] {
   const questions: SheetQuestion[] = data.data.questions;
   const topicsMap = new Map<string, Map<string, Question[]>>();
@@ -124,15 +140,251 @@ function getPlatformLogo(platform: string) {
     case 'geeksforgeeks':
       return '/assets/GeeksForGeeks_logo.png';
     case 'codestudio':
-      return '/assets/codestudio.png'; 
+      return '/assets/codestudio.png';
     default:
       return '/assets/leetcode_dark.png';
   }
 }
 
+type SortableTopicItemProps = {
+  topic: Topic;
+  progress: { text: string; percent: number };
+  toggleQuestionStatus: (topicId: string, subTopicId: string, questionId: string) => void;
+  toggleStar: (topicId: string, subTopicId: string, questionId: string) => void;
+  calculateSubtopicProgress: (subtopic: SubTopic) => { text: string; percent: number };
+  getPlatformLogo: (platform: string) => string;
+};
+
+function SortableTopicItem({
+  topic,
+  progress,
+  toggleQuestionStatus,
+  toggleStar,
+  calculateSubtopicProgress,
+  getPlatformLogo,
+}: SortableTopicItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: topic.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} suppressHydrationWarning>
+      <AccordionItem
+        value={topic.id}
+        className="border border-border bg-card rounded-[4px] overflow-hidden"
+      >
+        <div className="relative">
+          {/* Progress Bar for Topic */}
+          <div className="absolute top-0 left-0 w-full h-[3px] bg-muted z-20 pointer-events-none">
+            <div
+              className="h-full bg-primary transition-all duration-500 ease-in-out"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+          <AccordionTrigger className="px-4 py-3 hover:no-underline bg-card data-[state=open]:bg-card border-b border-transparent data-[state=open]:border-border transition-colors relative z-10 group">
+            <div className="flex items-center justify-between w-full pr-4 min-w-0">
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div
+                  {...attributes}
+                  {...listeners}
+                  className="cursor-grab active:cursor-grabbing flex-shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                  suppressHydrationWarning
+                >
+                  <GripVertical className="h-5 w-5 text-muted-foreground/50 hover:text-muted-foreground transition-colors" />
+                </div>
+                <span className="font-medium text-foreground text-base truncate">{topic.title}</span>
+                <span className="text-muted-foreground text-sm font-mono flex-shrink-0">{progress.text}</span>
+              </div>
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Button asChild variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground hover:bg-muted px-3">
+                  <div role="button">
+                    <Plus className="h-4 w-4 mr-1" /> Add
+                  </div>
+                </Button>
+                <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted">
+                  <div role="button">
+                    <MoreVertical className="h-4 w-4" />
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </AccordionTrigger>
+        </div>
+
+        <AccordionContent className="p-4 bg-background">
+          {topic.subtopics.length > 0 ? (
+            <Accordion type="multiple" className="w-full space-y-3">
+              {topic.subtopics.map((subtopic) => {
+                const subProgress = calculateSubtopicProgress(subtopic);
+                return (
+                  <AccordionItem key={subtopic.id} value={subtopic.id} className="border border-border rounded-md overflow-hidden">
+                    <div className="relative">
+                      {/* Progress Bar for Subtopic */}
+                      <div className="absolute top-0 left-0 w-full h-[2px] bg-muted z-20 pointer-events-none">
+                        <div
+                          className="h-full bg-primary transition-all duration-500 ease-in-out"
+                          style={{ width: `${subProgress.percent}%` }}
+                        />
+                      </div>
+                      <AccordionTrigger className="px-4 py-2 hover:no-underline bg-card text-sm group">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="text-muted-foreground font-medium truncate">{subtopic.title}</span>
+                          <span className="text-muted-foreground/70 text-xs pt-0.5 flex-shrink-0">{subProgress.text}</span>
+                        </div>
+                      </AccordionTrigger>
+                    </div>
+
+                    <AccordionContent className="pt-2 pb-0">
+                      <div className="space-y-2">
+                        {subtopic.questions.map((q) => (
+                          <div key={q.id} className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 py-3 bg-card border border-border rounded-md hover:border-muted-foreground/30 transition-colors group">
+                            <div className="flex items-center gap-4 w-full md:flex-1 md:min-w-0 mb-3 md:mb-0">
+                              <div
+                                className="cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
+                                onClick={() => toggleQuestionStatus(topic.id, subtopic.id, q.id)}
+                              >
+                                {q.status === "completed" ? (
+                                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                ) : (
+                                  <Circle className="h-5 w-5 text-emerald-500" />
+                                )}
+                              </div>
+                              <span className="text-foreground text-sm font-medium select-none truncate">{q.title}</span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4 w-full md:w-auto md:flex-shrink-0 justify-between md:justify-end">
+                              <div className="flex items-center gap-4">
+                                {/* YouTube Resource Link */}
+                                {q.resource && (
+                                  <a
+                                    href={q.resource}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title="Watch tutorial"
+                                  >
+                                    <Image
+                                      src="/assets/Youtube.png"
+                                      alt="YouTube"
+                                      width={20}
+                                      height={20}
+                                      className="w-5 h-5 object-contain"
+                                    />
+                                  </a>
+                                )}
+
+                                {/* Platform Logo */}
+                                <a
+                                  href={q.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`Open on ${q.platform}`}
+                                >
+                                  <Image
+                                    src={getPlatformLogo(q.platform)}
+                                    alt={q.platform}
+                                    width={20}
+                                    height={20}
+                                    className="w-5 h-5 object-contain"
+                                  />
+                                </a>
+
+                                {/* Difficulty */}
+                                <div className="w-auto md:w-16 flex items-center justify-start md:justify-center">
+                                  <span className={`text-xs font-semibold ${q.difficulty === "Easy" || q.difficulty === "Basic" ? "text-emerald-500" :
+                                    q.difficulty === "Medium" ? "text-yellow-500" :
+                                      "text-red-500"
+                                    }`}>
+                                    {q.difficulty}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-1 md:flex-none justify-end">
+                                {/* Topics/Tags */}
+                                <div className="w-auto md:w-48 flex items-center justify-end gap-2">
+                                  {q.topics.slice(0, 2).map((topic, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded max-w-[80px] md:max-w-[100px] truncate"
+                                      title={topic}
+                                    >
+                                      {topic}
+                                    </span>
+                                  ))}
+                                  {q.topics.length > 2 && (
+                                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                                      +{q.topics.length - 2}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Action Icons */}
+                                <div className="w-auto md:w-16 flex items-center justify-end gap-3 pl-2 md:pl-4 border-l border-border">
+                                  <Star
+                                    className={`h-4 w-4 cursor-pointer hover:scale-110 transition-transform ${q.starred ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleStar(topic.id, subtopic.id, q.id);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              })}
+            </Accordion>
+          ) : (
+            <div className="text-center text-muted-foreground py-8">No questions available</div>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+    </div>
+  );
+}
+
 export default function Home() {
   const initialTopics = useMemo(() => transformSheetData(sheetData), []);
   const [topics, setTopics] = useState<Topic[]>(initialTopics);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setTopics((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   const toggleQuestionStatus = (topicId: string, subTopicId: string, questionId: string) => {
     setTopics(prev => prev.map(topic => {
@@ -210,188 +462,34 @@ export default function Home() {
           </Button>
         </div>
 
-        {/* Main Accordion */}
-        <Accordion type="multiple" className="w-full space-y-4">
-          {topics.map((topic) => {
-            const progress = calculateTopicProgress(topic);
-
-            return (
-              <AccordionItem
-                key={topic.id}
-                value={topic.id}
-                className="border border-border bg-card rounded-[4px] overflow-hidden"
-              >
-                <div className="relative">
-                  {/* Progress Bar for Topic */}
-                  <div className="absolute top-0 left-0 w-full h-[3px] bg-muted z-20 pointer-events-none">
-                    <div
-                      className="h-full bg-primary transition-all duration-500 ease-in-out"
-                      style={{ width: `${progress.percent}%` }}
-                    />
-
-                  </div>
-                  <AccordionTrigger className="px-4 py-3 hover:no-underline bg-card data-[state=open]:bg-card border-b border-transparent data-[state=open]:border-border transition-colors relative z-10 group">
-                    <div className="flex items-center justify-between w-full pr-4 min-w-0">
-                      <div className="flex items-center gap-4 min-w-0 flex-1">
-                        <GripVertical className="h-5 w-5 text-muted-foreground/50 flex-shrink-0" />
-                        <span className="font-medium text-foreground text-base truncate">{topic.title}</span>
-                        <span className="text-muted-foreground text-sm font-mono flex-shrink-0">{progress.text}</span>
-                      </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button asChild variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground hover:bg-muted px-3">
-                          <div role="button">
-                            <Plus className="h-4 w-4 mr-1" /> Add
-                          </div>
-                        </Button>
-                        <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted">
-                          <div role="button">
-                            <MoreVertical className="h-4 w-4" />
-                          </div>
-                        </Button>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                </div>
-
-                <AccordionContent className="p-4 bg-background">
-                  {topic.subtopics.length > 0 ? (
-                    <Accordion type="multiple" className="w-full space-y-3">
-                      {topic.subtopics.map((subtopic) => {
-                        const subProgress = calculateSubtopicProgress(subtopic);
-                        return (
-                          <AccordionItem key={subtopic.id} value={subtopic.id} className="border border-border rounded-md overflow-hidden">
-                            <div className="relative">
-                              {/* Progress Bar for Subtopic */}
-                              <div className="absolute top-0 left-0 w-full h-[2px] bg-muted z-20 pointer-events-none">
-                                <div
-                                  className="h-full bg-primary transition-all duration-500 ease-in-out"
-                                  style={{ width: `${subProgress.percent}%` }}
-                                />
-                              </div>
-                              <AccordionTrigger className="px-4 py-2 hover:no-underline bg-card text-sm group">
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <span className="text-muted-foreground font-medium truncate">{subtopic.title}</span>
-                                  <span className="text-muted-foreground/70 text-xs pt-0.5 flex-shrink-0">{subProgress.text}</span>
-                                </div>
-                              </AccordionTrigger>
-                            </div>
-
-                            <AccordionContent className="pt-2 pb-0">
-                              <div className="space-y-2">
-                                {subtopic.questions.map((q) => (
-                                  <div key={q.id} className="flex flex-col md:flex-row items-start md:items-center justify-between px-4 py-3 bg-card border border-border rounded-md hover:border-muted-foreground/30 transition-colors group">
-                                    <div className="flex items-center gap-4 w-full md:flex-1 md:min-w-0 mb-3 md:mb-0">
-                                      <div
-                                        className="cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
-                                        onClick={() => toggleQuestionStatus(topic.id, subtopic.id, q.id)}
-                                      >
-                                        {q.status === "completed" ? (
-                                          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                        ) : (
-                                          <Circle className="h-5 w-5 text-emerald-500" />
-                                        )}
-                                      </div>
-                                      <span className="text-foreground text-sm font-medium select-none truncate">{q.title}</span>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-4 w-full md:w-auto md:flex-shrink-0 justify-between md:justify-end">
-                                      <div className="flex items-center gap-4">
-                                        {/* YouTube Resource Link */}
-                                        {q.resource && (
-                                          <a
-                                            href={q.resource}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
-                                            onClick={(e) => e.stopPropagation()}
-                                            title="Watch tutorial"
-                                          >
-                                            <Image
-                                              src="/assets/Youtube.png"
-                                              alt="YouTube"
-                                              width={20}
-                                              height={20}
-                                              className="w-5 h-5 object-contain"
-                                            />
-                                          </a>
-                                        )}
-
-                                        {/* Platform Logo */}
-                                        <a
-                                          href={q.link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="cursor-pointer hover:opacity-80 transition-opacity flex items-center"
-                                          onClick={(e) => e.stopPropagation()}
-                                          title={`Open on ${q.platform}`}
-                                        >
-                                          <Image
-                                            src={getPlatformLogo(q.platform)}
-                                            alt={q.platform}
-                                            width={20}
-                                            height={20}
-                                            className="w-5 h-5 object-contain"
-                                          />
-                                        </a>
-
-                                        {/* Difficulty */}
-                                        <div className="w-auto md:w-16 flex items-center justify-start md:justify-center">
-                                          <span className={`text-xs font-semibold ${q.difficulty === "Easy" || q.difficulty === "Basic" ? "text-emerald-500" :
-                                            q.difficulty === "Medium" ? "text-yellow-500" :
-                                              "text-red-500"
-                                            }`}>
-                                            {q.difficulty}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-2 flex-1 md:flex-none justify-end">
-                                        {/* Topics/Tags */}
-                                        <div className="w-auto md:w-48 flex items-center justify-end gap-2">
-                                          {q.topics.slice(0, 2).map((topic, idx) => (
-                                            <span
-                                              key={idx}
-                                              className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded max-w-[80px] md:max-w-[100px] truncate"
-                                              title={topic}
-                                            >
-                                              {topic}
-                                            </span>
-                                          ))}
-                                          {q.topics.length > 2 && (
-                                            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                                              +{q.topics.length - 2}
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {/* Action Icons */}
-                                        <div className="w-auto md:w-16 flex items-center justify-end gap-3 pl-2 md:pl-4 border-l border-border">
-                                          <Star
-                                            className={`h-4 w-4 cursor-pointer hover:scale-110 transition-transform ${q.starred ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleStar(topic.id, subtopic.id, q.id);
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
-                        )
-                      })}
-                    </Accordion>
-                  ) : (
-                    <div className="text-center text-muted-foreground py-8">No questions available</div>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            )
-          })}
-        </Accordion>
+        {/* Main Accordion with Drag and Drop */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={topics.map(t => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <Accordion type="multiple" className="w-full space-y-4">
+              {topics.map((topic) => {
+                const progress = calculateTopicProgress(topic);
+                return (
+                  <SortableTopicItem
+                    key={topic.id}
+                    topic={topic}
+                    progress={progress}
+                    toggleQuestionStatus={toggleQuestionStatus}
+                    toggleStar={toggleStar}
+                    calculateSubtopicProgress={calculateSubtopicProgress}
+                    getPlatformLogo={getPlatformLogo}
+                  />
+                );
+              })}
+            </Accordion>
+          </SortableContext>
+        </DndContext>
       </div>
     </div>
   )
