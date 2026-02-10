@@ -117,15 +117,14 @@ function transformSheetData(data: any): Topic[] {
   return topics;
 }
 
-// Get platform logo
 function getPlatformLogo(platform: string) {
   switch (platform.toLowerCase()) {
     case 'leetcode':
       return '/assets/leetcode_dark.png';
     case 'geeksforgeeks':
-      return '/assets/leetcode_dark.png'; // Update with GFG logo if available
+      return '/assets/GeeksForGeeks_logo.png';
     case 'codestudio':
-      return '/assets/leetcode_dark.png'; // Update with CodeStudio logo if available
+      return '/assets/codestudio.png'; 
     default:
       return '/assets/leetcode_dark.png';
   }
@@ -212,7 +211,7 @@ export default function Home() {
         </div>
 
         {/* Main Accordion */}
-        <Accordion type="multiple" defaultValue={topics.length > 0 ? [topics[0].id] : []} className="w-full space-y-4">
+        <Accordion type="multiple" className="w-full space-y-4">
           {topics.map((topic) => {
             const progress = calculateTopicProgress(topic);
 
@@ -229,6 +228,7 @@ export default function Home() {
                       className="h-full bg-primary transition-all duration-500 ease-in-out"
                       style={{ width: `${progress.percent}%` }}
                     />
+
                   </div>
                   <AccordionTrigger className="px-4 py-3 hover:no-underline bg-card data-[state=open]:bg-card border-b border-transparent data-[state=open]:border-border transition-colors relative z-10 group">
                     <div className="flex items-center justify-between w-full pr-4 min-w-0">
@@ -255,7 +255,7 @@ export default function Home() {
 
                 <AccordionContent className="p-4 bg-background">
                   {topic.subtopics.length > 0 ? (
-                    <Accordion type="multiple" defaultValue={topic.subtopics.map(st => st.id)} className="w-full space-y-3">
+                    <Accordion type="multiple" className="w-full space-y-3">
                       {topic.subtopics.map((subtopic) => {
                         const subProgress = calculateSubtopicProgress(subtopic);
                         return (
